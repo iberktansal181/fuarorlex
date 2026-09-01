@@ -192,6 +192,13 @@ button.wide:active{background:#F2F6FC}
 
 /* ---------- kayıtlar ekranı ---------- */
 #listscreen .ps{background:var(--paper);border-bottom:1px solid var(--line-s);padding:14px 20px}
+#listscreen .ps .in{margin-bottom:10px}
+#listscreen .ps .in:last-child{margin-bottom:0}
+.flab{font-size:13px;color:var(--muted);margin-bottom:6px;display:block}
+.ghead{
+  padding:11px 20px;background:#F0F4FB;border-bottom:1px solid var(--line-s);
+  font-size:13px;font-weight:600;color:var(--navy);position:sticky;top:0;
+}
 #listscreen .plist{background:var(--paper);min-height:40vh}
 #listscreen .psum .sp{margin-left:auto}
 
@@ -317,7 +324,11 @@ button.wide:active{background:#F2F6FC}
 
 <!-- ============ KAYITLAR ============ -->
 <section class="screen" id="listscreen">
-  <div class="ps"><input class="in" id="q" placeholder="İsim, firma, ülke, telefon ara" autocomplete="off"></div>
+  <div class="ps">
+    <label for="ffilter" class="flab">Fuar</label>
+    <select class="in" id="ffilter"></select>
+    <input class="in" id="q" placeholder="İsim, firma, ülke, telefon ara" autocomplete="off">
+  </div>
   <div class="psum">
     <span><b id="s1">0</b> kayıt</span>
     <span class="e" id="s2" hidden></span>
@@ -386,7 +397,7 @@ function damgala(){ var r = cur(); snap = r ? JSON.stringify(r) : ""; }
 var $ = function(id){ return document.getElementById(id); };
 
 function blank(){
-  return { id: Date.now()+"-"+Math.random().toString(36).slice(2,7), ad:"", cins:"", firma:"", unvan:"", ulke:"", sehir:"", tel:"", mail:"", urun:[], not:"", ts:new Date().toISOString(), kayitTs:"", guncelTs:"" };
+  return { id: Date.now()+"-"+Math.random().toString(36).slice(2,7), ad:"", cins:"", firma:"", unvan:"", ulke:"", sehir:"", tel:"", mail:"", urun:[], not:"", fuar:db.fair, ts:new Date().toISOString(), kayitTs:"", guncelTs:"" };
 }
 function tarihStr(iso){
   if(!iso) return "";
@@ -516,6 +527,7 @@ function kaydet(){
   temizleHata();
   var yeniMi = !r.kayitli;
   var simdi = new Date().toISOString();
+  if(!r.fuar) r.fuar = db.fair;          /* kayıt hangi fuarda alındıysa ona bağlanır */
   if(!r.kayitTs) r.kayitTs = simdi;     /* ilk kaydın alındığı an */
   r.guncelTs = simdi;                    /* her düzenlemede tazelenir */
   r.kayitli = true;
@@ -575,14 +587,20 @@ function ekran(n){
   if(window.scrollTo) window.scrollTo(0,0);
 }
 
+function homeSay(){
+  var n = db.records.length;
+  var bu = db.fair ? db.records.filter(function(r){ return (r.fuar||"") === db.fair; }).length : 0;
+  $("tlistsub").textContent = !n ? "Henüz kayıt yok"
+    : (db.fair ? (bu + " kayıt · " + db.fair + (n > bu ? "  (toplam " + n + ")" : ""))
+               : (n + " kayıt"));
+}
 function anasayfa(mesaj){
   flush();
-  var n = db.records.length;
-  $("tlistsub").textContent = n ? (n + " kayıt" + (db.fair ? " · " + db.fair : "")) : "Henüz kayıt yok";
+  homeSay();
   var t = $("toast");
   if(mesaj){ t.textContent = mesaj; t.hidden = false; }
   else { t.hidden = true; }
-  if(!uzakBekliyor) isaret("dot", n ? n + " kayıt kayıtlı" : "Hazır");
+  if(!uzakBekliyor) isaret("dot", db.records.length ? db.records.length + " kayıt kayıtlı" : "Hazır");
   ekran("home");
 }
 
@@ -648,6 +666,7 @@ function dupe(r){
   if(norm(r.tel).length>5 || norm(r.mail).length>5){
     db.records.forEach(function(o,i){
       if(o.id===r.id || hit>=0) return;
+      if((o.fuar||"") !== (r.fuar||"")) return;   /* farklı fuar, ayrı ziyaret sayılır */
       if(norm(r.tel).length>5 && norm(o.tel)===norm(r.tel)) hit=i;
       else if(norm(r.mail).length>5 && norm(o.mail)===norm(r.mail)) hit=i;
     });
@@ -686,20 +705,70 @@ function cikis(){
 }
 
 /* --- liste --- */
+var filtre = "";                       /* "" = seçili fuar, "__hepsi" = tümü */
+
+function fuarlariSay(){
+  var m = {}, sira = [];
+  db.records.forEach(function(r){
+    var f = r.fuar || "(fuarsız)";
+    if(!(f in m)){ m[f] = 0; sira.push(f); }
+    m[f]++;
+  });
+  return { say:m, sira:sira };
+}
+function filtreKur(){
+  var s = $("ffilter"), o = fuarlariSay();
+  var sec = filtre || db.fair || "__hepsi";
+  s.innerHTML = "";
+  o.sira.forEach(function(f){
+    var e = document.createElement("option");
+    e.value = f; e.textContent = f + " (" + o.say[f] + ")";
+    s.appendChild(e);
+  });
+  if(db.fair && o.sira.indexOf(db.fair) < 0){
+    var e0 = document.createElement("option");
+    e0.value = db.fair; e0.textContent = db.fair + " (0)";
+    s.insertBefore(e0, s.firstChild);
+  }
+  var t = document.createElement("option");
+  t.value = "__hepsi"; t.textContent = "Tüm fuarlar (" + db.records.length + ")";
+  s.appendChild(t);
+  if(!Array.prototype.some.call(s.options, function(x){ return x.value === sec; })) sec = "__hepsi";
+  s.value = sec; filtre = sec;
+}
+function filtreliKayitlar(){
+  if(filtre === "__hepsi") return db.records.map(function(r,i){ return {r:r, i:i}; });
+  return db.records.map(function(r,i){ return {r:r, i:i}; })
+    .filter(function(x){ return (x.r.fuar || "(fuarsız)") === filtre; });
+}
+
 function list(){
+  filtreKur();
   var q = norm($("q").value), box = $("plist");
   box.innerHTML = "";
-  var eksikSay = 0, gorunen = 0;
-  db.records.forEach(function(r){ if(eksik(r).length) eksikSay++; });
-  $("s1").textContent = db.records.length;
+  var kume = filtreliKayitlar();
+  var eksikSay = 0, gorunen = 0, sonFuar = null;
+  kume.forEach(function(x){ if(eksik(x.r).length) eksikSay++; });
+  $("s1").textContent = kume.length;
   $("s2").hidden = !eksikSay;
   $("s2").textContent = eksikSay + " kayıt eksik";
-  $("s3").textContent = db.fair || "";
+  $("s3").textContent = (filtre === "__hepsi") ? "Tüm fuarlar" : filtre;
 
-  db.records.forEach(function(r,i){
+  kume.forEach(function(x){
+    var r = x.r, i = x.i;
     var hay = norm(r.ad + r.firma + r.ulke + r.sehir + r.tel + r.mail);
     if(q && hay.indexOf(q)<0) return;
     gorunen++;
+
+    if(filtre === "__hepsi"){
+      var f = r.fuar || "(fuarsız)";
+      if(f !== sonFuar){
+        sonFuar = f;
+        var gh = document.createElement("div");
+        gh.className = "ghead"; gh.textContent = f;
+        box.appendChild(gh);
+      }
+    }
 
     var row = document.createElement("div");
     row.className = "row" + (i===idx ? " cur" : "");
@@ -747,23 +816,25 @@ function list(){
     box.appendChild(row);
   });
 
-  if(!gorunen) box.innerHTML = '<div class="del">'+(db.records.length ? "Eşleşen kayıt yok." : "Henüz kayıt yok.")+'</div>';
+  if(!gorunen) box.innerHTML = '<div class="del">'+(db.records.length ? "Bu fuarda eşleşen kayıt yok." : "Henüz kayıt yok.")+'</div>';
 }
 
 /* --- dışa aktar --- */
 function csv(){
   flush();
-  if(!db.records.length){ alert("Aktarılacak kayıt yok."); return; }
-  var ek = db.records.filter(function(r){ return eksik(r).length; }).length;
+  var kume = filtreliKayitlar().map(function(x){ return x.r; });
+  if(!kume.length){ alert("Aktarılacak kayıt yok."); return; }
+  var ek = kume.filter(function(r){ return eksik(r).length; }).length;
   if(ek && !confirm(ek + " kayıtta eksik alan var. Yine de aktarılsın mı?")) return;
   var head = ["#","Kayıt Tarihi","Kayıt Saati","Son Güncelleme","Fuar","Ad Soyad","Cinsiyet","Firma","Görev","Ülke","Şehir","Telefon","E-posta","İlgilendiği Ürünler","Notlar"];
   var q = function(v){ return '"' + String(v==null?"":v).replace(/"/g,'""') + '"'; };
-  var rows = db.records.map(function(r,i){
+  var rows = kume.map(function(r,i){
     var kt = r.kayitTs || r.ts;
-    return [i+1, tarihStr(kt), saatStr(kt), (r.guncelTs && r.guncelTs !== r.kayitTs) ? (tarihStr(r.guncelTs)+" "+saatStr(r.guncelTs)) : "", db.fair, r.ad, r.cins, r.firma, r.unvan, r.ulke, r.sehir, r.tel, r.mail, (r.urun||[]).join(", "), (r.not||"").replace(/\n/g," ")].map(q).join(";");
+    return [i+1, tarihStr(kt), saatStr(kt), (r.guncelTs && r.guncelTs !== r.kayitTs) ? (tarihStr(r.guncelTs)+" "+saatStr(r.guncelTs)) : "", r.fuar || db.fair, r.ad, r.cins, r.firma, r.unvan, r.ulke, r.sehir, r.tel, r.mail, (r.urun||[]).join(", "), (r.not||"").replace(/\n/g," ")].map(q).join(";");
   });
   var out = "\uFEFF" + head.map(q).join(";") + "\r\n" + rows.join("\r\n");
-  var name = "ORLEX-" + (db.fair ? db.fair.replace(/[^\wğüşıöçĞÜŞİÖÇ -]/g,"").trim().replace(/\s+/g,"-") : "fuar") + "-" + new Date().toISOString().slice(0,10) + ".csv";
+  var etiket = (filtre === "__hepsi") ? "tum-fuarlar" : filtre;
+  var name = "ORLEX-" + (etiket ? etiket.replace(/[^\wğüşıöçĞÜŞİÖÇ -]/g,"").trim().replace(/\s+/g,"-") : "fuar") + "-" + new Date().toISOString().slice(0,10) + ".csv";
   var a = document.createElement("a");
   a.href = URL.createObjectURL(new Blob([out], {type:"text/csv;charset=utf-8"}));
   a.download = name; document.body.appendChild(a); a.click();
@@ -799,12 +870,12 @@ $("fair").addEventListener("change", function(){
   if(v === "__d"){ $("fairother").hidden = false; $("fairother").focus(); db.fair = $("fairother").value.trim(); }
   else { $("fairother").hidden = true; $("fairother").value = ""; db.fair = v; }
   if(db.fair) $("fair").classList.remove("err");
-  mark();
+  mark(); homeSay(); $("toast").hidden = true;
 });
 $("fairother").addEventListener("input", function(){
   db.fair = $("fairother").value.trim();
   if(db.fair) $("fair").classList.remove("err");
-  mark();
+  mark(); homeSay();
 });
 $("ulke").addEventListener("change", function(){
   var r = cur(); if(!r) return;
@@ -824,7 +895,8 @@ $("cins").addEventListener("click", function(e){
 });
 $("save").onclick  = kaydet;
 $("tnew").onclick  = yeni;
-$("tlist").onclick = function(){ $("q").value=""; list(); ekran("listscreen"); };
+$("tlist").onclick = function(){ $("q").value=""; filtre = db.fair || "__hepsi"; list(); ekran("listscreen"); };
+$("ffilter").onchange = function(){ filtre = $("ffilter").value; list(); };
 $("back").onclick  = function(){ if(EKRAN === "form") cikis(); else anasayfa(); };
 $("q").oninput     = list;
 $("csv").onclick   = csv;
@@ -866,6 +938,7 @@ uzakOku().then(function(u){
   if(u && y) v = ((y.rev||0) > (u.rev||0)) ? y : u;
   else v = u || y;
   if(v && v.records){ db = v; db.fair = db.fair||""; db.rev = db.rev||0; }
+  db.records.forEach(function(r){ if(!r.fuar) r.fuar = db.fair || "(fuarsız)"; });
   idx = -1; damgala();
   fuarSec(db.fair);
   anasayfa();

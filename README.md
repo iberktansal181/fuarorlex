@@ -65,6 +65,12 @@ Bu adresi bir yere kaydet. **Bir daha değiştirme** — sebebini aşağıda anl
 kullanıcı adını değiştirirsen adres de değişir ve eski kayıtlar görünmez olur. Yayına almadan önce
 repo adına karar ver.
 
+**Her kayıt kendi fuarına bağlıdır.** Kayıt alınırken ana sayfada hangi fuar seçiliyse, o kayıt
+kalıcı olarak o fuara yazılır. Sonradan başka bir fuara geçmen eski kayıtları etkilemez.
+Kayıtlar ekranındaki fuar filtresinden istediğin fuara geçebilir, "Tüm fuarlar" diyerek hepsini
+fuar başlıkları altında gruplanmış görebilirsin. Excel'e aktarma da o an seçili fuarı verir —
+A fuarını seçip aktarırsan sadece A fuarının kayıtları iner, dosya adında da fuar adı yazar.
+
 **Kayıtlar tablette durur, bulutta değil.** Aynı fuarda iki tablet kullanırsanız her biri kendi
 listesini tutar; akşam ikisinden ayrı ayrı Excel alıp birleştirmen gerekir.
 
